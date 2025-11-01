@@ -136,7 +136,7 @@ cron.schedule("0 0 * * *", async () => {
 });
 
 // Port fix (Render uses process.env.PORT)
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 8080;
 
 // Start server after DB connects
 connectDB()
