@@ -53,7 +53,8 @@ cron.schedule("0 0 * * *", async () => {
 });
 
 // Start server
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
+
 connectDB()
   .then(() => {
     app.listen(PORT, "0.0.0.0", () =>
