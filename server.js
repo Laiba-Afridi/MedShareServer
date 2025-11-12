@@ -15,6 +15,7 @@ const app = express();
 // Serve static assets
 app.use("/assets", express.static(path.join(__dirname, "../assets")));
 app.use("/public", express.static(path.join(__dirname, "public")));
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Middleware

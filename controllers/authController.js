@@ -1,12 +1,13 @@
+const crypto = require('crypto');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const Donation = require('../models/Donation');
 const path = require('path');
 
 const FRONTEND_URL = process.env.FRONTEND_URL;
+const BACKEND_URL = process.env.BACKEND_URL;
 
 //Register User Function
 const registerUser = async (req, res) => {
@@ -26,7 +27,7 @@ const registerUser = async (req, res) => {
     role = role.trim();
     password = password.trim();
     contactNumber = contactNumber.trim();
-    address = address ? address.trim() : "";
+    address = address ? address.trim() : '';
 
     //define helper functions ABOVE your main validation section
     const gibberishPatterns = [
@@ -35,13 +36,14 @@ const registerUser = async (req, res) => {
       /^[^a-zA-Z0-9]+$/, // only symbols
     ];
 
-    const isGibberish = (text) => {
+    const isGibberish = text => {
       const hasVowel = /[aeiouAEIOU]/.test(text);
-      const matchesBadPattern = gibberishPatterns.some((r) => r.test(text));
+      const matchesBadPattern = gibberishPatterns.some(r => r.test(text));
       return !hasVowel || matchesBadPattern;
     };
 
-    const addressStructureRegex = /(\d+|house|road|street|block|sector|phase|town|colony|apartment|village)/i;
+    const addressStructureRegex =
+      /(\d+|house|road|street|block|sector|phase|town|colony|apartment|village)/i;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const phoneRegex = /^((\+92)?(03)[0-9]{9})$/;
@@ -66,28 +68,27 @@ const registerUser = async (req, res) => {
         message:
           'Password must be at least 8 characters & include a letter, number & symbol',
       });
-      
     }
 
     //Anti-Gibberish Checks — place these AFTER other regexes, BEFORE saving user
     if (isGibberish(fullName) || fullName.length < 3) {
       return res.status(400).json({
         message:
-          "Please enter a valid full name (no random characters or gibberish).",
+          'Please enter a valid full name (no random characters or gibberish).',
       });
     }
 
     if (!address || address.length < 5 || isGibberish(address)) {
       return res.status(400).json({
         message:
-          "Please enter a valid address (use real words, not random letters).",
+          'Please enter a valid address (use real words, not random letters).',
       });
     }
 
     if (!addressStructureRegex.test(address)) {
       return res.status(400).json({
         message:
-          "Please enter a proper home address (include street, house number, or known location).",
+          'Please enter a proper home address (include street, house number, or known location).',
       });
     }
 
@@ -132,7 +133,6 @@ const registerUser = async (req, res) => {
 //Login User Function
 const loginUser = async (req, res) => {
   try {
-
     const {fullName, password, role} = req.body;
 
     if (!fullName || !password || !role) {
@@ -144,7 +144,6 @@ const loginUser = async (req, res) => {
     const trimmedFullName = fullName.trim();
     const trimmedPassword = password.trim();
     const trimmedRole = role.trim();
-
 
     const user = await User.findOne({
       fullName: trimmedFullName,
@@ -206,14 +205,14 @@ const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // Expires in 15 mins
     await user.save();
 
-    const emailLink = `http://192.168.0.101:8080/reset-password/${token}`;
+    const emailLink = `${BACKEND_URL}/reset-password/${token}`;
 
     //  Send email with link
     const transporter = nodemailer.createTransport({
       service: 'Gmail',
       auth: {
         user: 'medshare.userhelp@gmail.com',
-        pass: 'jqbv lecg awvq nxho',
+        pass: 'zzyp bvcx hkyl awgi',
       },
     });
 
@@ -236,11 +235,13 @@ const forgotPassword = async (req, res) => {
     await transporter.sendMail(mailOptions);
     res.status(200).json({message: 'Reset link sent to email.'});
   } catch (error) {
+    console.log("Email send error:", error);
     res.status(500).json({message: 'Server error.'});
   }
 };
 
-//Reset Password Fucntion
+
+//Reset Password Function
 
 const resetPassword = async (req, res) => {
   try {
@@ -249,7 +250,6 @@ const resetPassword = async (req, res) => {
     const {token, newPassword} = req.body;
 
     if (!token || !newPassword) {
-
       return res.status(400).json({message: 'Missing token or new password.'});
     }
 
@@ -257,7 +257,6 @@ const resetPassword = async (req, res) => {
       resetPasswordToken: token.trim(),
       resetPasswordExpires: {$gt: Date.now()},
     });
-
 
     if (!user) {
       return res.status(400).json({message: 'Invalid or expired token.'});
@@ -317,14 +316,27 @@ const deleteAccount = async (req, res) => {
     }
 
     if (user.role === 'Donate A Medicine') {
-
+      for (const donation of donations) {
+        // Each donation may have multiple images
+        if (donation.images && donation.images.length > 0) {
+          for (const imgPath of donation.images) {
+            const fullPath = path.join(__dirname, '..', imgPath);
+            if (fs.existsSync(fullPath)) {
+              try {
+                fs.unlinkSync(fullPath); // Delete image file
+              } catch (err) {
+                c
+              }
+            }
+          }
+        }
+      }
       await Donation.deleteMany({donorId: userId});
-      await Request.deleteMany({ donorId: userId });
-      await Notification.deleteMany({ donorId: userId });
-    } 
-    else if (user.role === 'Receive A Medicine') {
+      await Request.deleteMany({donorId: userId});
+      await Notification.deleteMany({donorId: userId});
+    } else if (user.role === 'Receive A Medicine') {
       await Request.deleteMany({receiverId: userId});
-      await Notification.deleteMany({ receiverId: userId });
+      await Notification.deleteMany({receiverId: userId});
     }
 
     await User.findByIdAndDelete(userId);
@@ -333,10 +345,10 @@ const deleteAccount = async (req, res) => {
       .status(200)
       .json({message: 'Account and related data deleted successfully.'});
   } catch (error) {
-
     res.status(500).json({message: 'Server error during account deletion.'});
   }
 };
+
 
 // Get current user info
 const getProfile = async (req, res) => {
@@ -379,7 +391,7 @@ const updateProfile = async (req, res) => {
 function parseFlexibleDate(dateStr) {
   if (!dateStr || !dateStr.trim()) return null;
 
-  const normalized = dateStr.trim().replace(/[\.\s/]+/g, '-'); 
+  const normalized = dateStr.trim().replace(/[\.\s/]+/g, '-');
   const parts = normalized.split('-').map(p => p.padStart(2, '0'));
 
   if (parts.length === 3) {
@@ -393,8 +405,63 @@ function parseFlexibleDate(dateStr) {
     return new Date(`${parts[1]}-${parts[0]}`); // MM-YYYY
   }
 
-  return null; 
+  return null;
 }
+
+// const submitDonation = async (req, res) => {
+//   try {
+//     const {
+//       medicineName,
+//       quantity,
+//       medicineForm,
+//       strength,
+//       manufacturingDate,
+//       expiryDate,
+//       donorName,
+//       donorPhoneNumber,
+//       donorAddress,
+//     } = req.body;
+
+//     // const imagePaths = req.files.map(file => 'uploads/' + file.filename);
+//     // const imagePaths = req.files.map(file => `${BACKEND_URL}/uploads/${file.filename}`);
+// const imagePaths = req.files.map(file => `${process.env.BACKEND_URL}/uploads/${file.filename}`);
+
+
+//     const parsedManufacturingDate = parseFlexibleDate(manufacturingDate);
+//     const parsedExpiryDate = parseFlexibleDate(expiryDate);
+
+//     if (parsedExpiryDate) {
+//       const twoWeeksLater = new Date();
+//       twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+//       if (parsedExpiryDate <= twoWeeksLater) {
+//         return res.status(400).json({
+//           message: 'We do not accept medicines expiring within 2 weeks.',
+//         });
+//       }
+//     }
+
+//     const newDonation = new Donation({
+//       medicineName,
+//       quantity,
+//       medicineForm,
+//       strength,
+//       manufacturingDate: parsedManufacturingDate,
+//       expiryDate: parsedExpiryDate,
+//       donorName,
+//       donorPhoneNumber,
+//       donorAddress,
+//       donorId: req.user._id,
+//       images: imagePaths,
+//     });
+
+//     await newDonation.save();
+
+//     res.status(201).json({message: 'Donation submitted successfully!'});
+//   } catch (error) {
+//     res.status(500).json({message: 'Server error'});
+//   }
+// };
+const path = require('path');
 
 const submitDonation = async (req, res) => {
   try {
@@ -410,11 +477,16 @@ const submitDonation = async (req, res) => {
       donorAddress,
     } = req.body;
 
-    const imagePaths = req.files.map(file => 'uploads/' + file.filename);
+    // Make sure BACKEND_URL is set correctly in your environment variables
+    // Example: https://your-app.onrender.com
+    
+    const backendUrl = process.env.BACKEND_URL || 'https://medshareserver.onrender.com';
+
+const imagePaths = req.files.map(file => `${backendUrl}/uploads/${file.filename}`);
+
 
     const parsedManufacturingDate = parseFlexibleDate(manufacturingDate);
     const parsedExpiryDate = parseFlexibleDate(expiryDate);
-
 
     if (parsedExpiryDate) {
       const twoWeeksLater = new Date();
@@ -437,22 +509,22 @@ const submitDonation = async (req, res) => {
       donorPhoneNumber,
       donorAddress,
       donorId: req.user._id,
-      images: imagePaths,
+      images: imagePaths, // Store full URLs
     });
 
     await newDonation.save();
 
-    res.status(201).json({message: 'Donation submitted successfully!'});
+    res.status(201).json({ message: 'Donation submitted successfully!', donation: newDonation });
   } catch (error) {
-
-    res.status(500).json({message: 'Server error'});
+    console.error('Submit Donation Error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 // Get current user profile
 const getMe = async (req, res) => {
   try {
-    
     const user = await User.findById(req.user.id).select(
       'fullName contactNumber email role address',
     );
@@ -470,24 +542,31 @@ const getDonations = async (req, res) => {
     const userId = req.user.id;
 
     // Fetch all donations by this donor
-    let donations = await Donation.find({ donorId: userId }).sort({ donationDate: -1 });
+    let donations = await Donation.find({donorId: userId}).sort({
+      donationDate: -1,
+    });
 
     // Find all approved requests (i.e., already donated medicines)
     const Request = require('../models/Request');
-    const approvedRequests = await Request.find({ status: 'approved' }).select('medicineId');
-    const approvedMedicineIds = approvedRequests.map(r => r.medicineId.toString());
+    const approvedRequests = await Request.find({status: 'approved'}).select(
+      'medicineId',
+    );
+    const approvedMedicineIds = approvedRequests.map(r =>
+      r.medicineId.toString(),
+    );
 
     // Filter out medicines that have been approved (already donated)
-    donations = donations.filter(d => !approvedMedicineIds.includes(d._id.toString()));
+    donations = donations.filter(
+      d => !approvedMedicineIds.includes(d._id.toString()),
+    );
 
     // Send back only those not donated yet (active or expired)
     res.status(200).json(donations);
   } catch (error) {
-    console.error("Error fetching donations:", error);
-    res.status(500).json({ message: "Server error, unable to fetch donations." });
+    console.error('Error fetching donations:', error);
+    res.status(500).json({message: 'Server error, unable to fetch donations.'});
   }
 };
-
 
 // Get all donations (for receiver side)
 const getAllDonations = async (req, res) => {
@@ -559,17 +638,15 @@ const Request = require('../models/Request');
 const getRequests = async (req, res) => {
   try {
     const userId = req.user._id;
-    const role = req.user.role; 
+    const role = req.user.role;
 
     let requests;
 
     if (role === 'donor') {
-      
       requests = await Request.find({donorId: userId})
         .populate('receiverId', 'fullName contactNumber address')
         .sort({createdAt: -1});
     } else if (role === 'receiver') {
-     
       requests = await Request.find({receiverId: userId})
         .populate('donorId', 'fullName contactNumber address')
         .sort({createdAt: -1});
