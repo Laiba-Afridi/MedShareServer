@@ -16,8 +16,6 @@ const app = express();
 app.use("/assets", express.static(path.join(__dirname, "../assets")));
 app.use("/public", express.static(path.join(__dirname, "public")));
 
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
 // Middleware
 app.use(express.json());
 app.use(cors({ origin: "*" }));

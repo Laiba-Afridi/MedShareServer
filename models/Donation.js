@@ -15,7 +15,7 @@ const donationSchema = new mongoose.Schema({
   donorName: { type: String, required: true },
   donorPhoneNumber: { type: String, required: true },
   donorAddress: { type: String, required: true },
-  images: [String],
+  image: req.file.path,
   createdAt: { type: Date, default: Date.now },
 });
 
