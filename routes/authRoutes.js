@@ -308,7 +308,7 @@
 
 const express = require('express');
 const multer = require('multer');
-const { authenticate } = require('../middleware/auth');
+const { authenticate } = require('../middleware/authMiddleware');
 const {
   submitDonation,
   getAllDonations,
