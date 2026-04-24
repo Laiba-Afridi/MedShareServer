@@ -21,8 +21,16 @@ cloudinary.config({
 //Register User Function
 const registerUser = async (req, res) => {
   try {
-    let {fullName, email, contactNumber, role, address, password, acceptTerms} =
-      req.body;
+    let {
+      fullName,
+      email,
+      contactNumber,
+      role,
+      city,
+      area,
+      password,
+      acceptTerms,
+    } = req.body;
 
     if (!acceptTerms) {
       return res
@@ -36,7 +44,8 @@ const registerUser = async (req, res) => {
     role = role.trim();
     password = password.trim();
     contactNumber = contactNumber.trim();
-    address = address ? address.trim() : '';
+    city = (city || '').toString().trim();
+    area = (area || '').toString().trim();
 
     //define helper functions ABOVE your main validation section
     const gibberishPatterns = [
@@ -51,8 +60,6 @@ const registerUser = async (req, res) => {
       return !hasVowel || matchesBadPattern;
     };
 
-    const addressStructureRegex =
-      /(\d+|house|road|street|block|sector|phase|town|colony|apartment|village)/i;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const phoneRegex = /^((\+92)?(03)[0-9]{9})$/;
@@ -79,7 +86,6 @@ const registerUser = async (req, res) => {
       });
     }
 
-    //Anti-Gibberish Checks — place these AFTER other regexes, BEFORE saving user
     if (isGibberish(fullName) || fullName.length < 3) {
       return res.status(400).json({
         message:
@@ -87,17 +93,15 @@ const registerUser = async (req, res) => {
       });
     }
 
-    if (!address || address.length < 5 || isGibberish(address)) {
+    if (typeof city !== 'string' || city.trim().length < 2) {
       return res.status(400).json({
-        message:
-          'Please enter a valid address (use real words, not random letters).',
+        message: 'Please enter a valid city.',
       });
     }
 
-    if (!addressStructureRegex.test(address)) {
+    if (typeof area !== 'string' || area.trim().length < 2) {
       return res.status(400).json({
-        message:
-          'Please enter a proper home address (include street, house number, or known location).',
+        message: 'Please enter a valid area/locality.',
       });
     }
 
@@ -122,7 +126,8 @@ const registerUser = async (req, res) => {
       email,
       contactNumber,
       role,
-      address,
+      city,
+      area,
       password,
     });
     const token = jwt.sign({id: newUser._id}, process.env.JWT_SECRET, {
@@ -131,7 +136,7 @@ const registerUser = async (req, res) => {
 
     res.status(201).json({
       message: 'Registration successful!',
-      user: {id: newUser._id, fullName, email, contactNumber, role, address},
+      user: {id: newUser._id, fullName, email, contactNumber, role, city, area},
       token,
     });
   } catch (error) {
@@ -244,11 +249,10 @@ const forgotPassword = async (req, res) => {
     await transporter.sendMail(mailOptions);
     res.status(200).json({message: 'Reset link sent to email.'});
   } catch (error) {
-    console.log("Email send error:", error);
+    console.log('Email send error:', error);
     res.status(500).json({message: 'Server error.'});
   }
 };
-
 
 //Reset Password Function
 
@@ -313,36 +317,87 @@ const verifyPassword = async (req, res) => {
   }
 };
 
+// const deleteAccount = async (req, res) => {
+//   try {
+//     const userId = req.user._id;
+//     const Request = require('../models/Request');
+//     const Notification = require('../models/Notification');
+//     const user = await User.findById(userId);
+
+//     if (!user) {
+//       return res.status(404).json({message: 'User not found.'});
+//     }
+
+//     if (user.role === 'Donate A Medicine') {
+//       await Donation.deleteMany({donorId: userId});
+//       await Request.deleteMany({donorId: userId});
+//       await Notification.deleteMany({donorId: userId});
+//     } else if (user.role === 'Receive A Medicine') {
+//       await Request.deleteMany({receiverId: userId});
+//       await Notification.deleteMany({receiverId: userId});
+//     }
+
+//     await User.findByIdAndDelete(userId);
+
+//     res
+//       .status(200)
+//       .json({message: 'Account and related data deleted successfully.'});
+//   } catch (error) {
+//     res.status(500).json({message: 'Server error during account deletion.'});
+//   }
+// };
+
 const deleteAccount = async (req, res) => {
   try {
     const userId = req.user._id;
+
     const Request = require('../models/Request');
     const Notification = require('../models/Notification');
-    const user = await User.findById(userId);
 
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({message: 'User not found.'});
     }
 
-    if (user.role === 'Donate A Medicine') {
+    // 1️⃣ Delete all donations by this user (Donor role)
+    const userDonations = await Donation.find({donorId: userId});
+
+    if (userDonations.length > 0) {
+      const donationIds = userDonations.map(d => d._id);
+
+      // Delete all requests related to these donations
+      await Request.deleteMany({medicineId: {$in: donationIds}});
+
+      // Delete all notifications for these medicines
+      await Notification.deleteMany({medicineId: {$in: donationIds}});
+
+      // Delete the donations themselves
       await Donation.deleteMany({donorId: userId});
-      await Request.deleteMany({donorId: userId});
-      await Notification.deleteMany({donorId: userId});
-    } else if (user.role === 'Receive A Medicine') {
-      await Request.deleteMany({receiverId: userId});
-      await Notification.deleteMany({receiverId: userId});
     }
 
+    // 2️⃣ Delete all requests where user is donor OR receiver
+    await Request.deleteMany({
+      $or: [{donorId: userId}, {receiverId: userId}],
+    });
+
+    // 3️⃣ Delete all notifications involving this user
+    await Notification.deleteMany({
+      $or: [{donorId: userId}, {receiverId: userId}],
+    });
+
+    // 4️⃣ Delete the user account
     await User.findByIdAndDelete(userId);
 
-    res
-      .status(200)
-      .json({message: 'Account and related data deleted successfully.'});
+    return res.status(200).json({
+      message: 'Account and all related data deleted successfully.',
+    });
   } catch (error) {
-    res.status(500).json({message: 'Server error during account deletion.'});
+    console.error('Account Delete Error:', error);
+    return res.status(500).json({
+      message: 'Server error during account deletion.',
+    });
   }
 };
-
 
 // Get current user info
 const getProfile = async (req, res) => {
@@ -417,7 +472,9 @@ const submitDonation = async (req, res) => {
     } = req.body;
 
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: 'Please upload at least one image.' });
+      return res
+        .status(400)
+        .json({message: 'Please upload at least one image.'});
     }
 
     // Upload each image to Cloudinary
@@ -458,10 +515,15 @@ const submitDonation = async (req, res) => {
 
     await newDonation.save();
 
-    res.status(201).json({ message: 'Donation submitted successfully!', donation: newDonation });
+    res
+      .status(201)
+      .json({
+        message: 'Donation submitted successfully!',
+        donation: newDonation,
+      });
   } catch (error) {
     console.error('Donation submission error:', error);
-    res.status(500).json({ message: 'Server error while submitting donation.' });
+    res.status(500).json({message: 'Server error while submitting donation.'});
   }
 };
 

@@ -26,11 +26,15 @@ const userSchema = new mongoose.Schema({
     match: [/^(?:\+92|0)[0-9]{10}$/, "Invalid Pakistani contact number format"],
   },
 
-  address: {
+  city: {
     type: String,
-    required: [true, "Address is required"],
-    minlength: [5, "Address must be at least 5 characters long"],
-    maxlength: [200, "Address cannot exceed 200 characters"],
+    required: [true, "City is required"],
+    trim: true,
+  },
+
+  area: {
+    type: String,
+    required: [true, "Area is required"],
     trim: true,
   },
   
