@@ -473,8 +473,6 @@ function parseFlexibleDate(dateStr) {
   return date;
 }
 
-
-
 const submitDonation = async (req, res) => {
   try {
     const {
@@ -505,14 +503,12 @@ const submitDonation = async (req, res) => {
       uploadedImages.push(result.secure_url);
     }
 
-    // ✅ FIXED: correct declaration
     const isValidDate = (d) =>
       d instanceof Date && !isNaN(d.getTime());
 
     const parsedManufacturingDate = parseFlexibleDate(manufacturingDate);
     const parsedExpiryDate = parseFlexibleDate(expiryDate);
 
-    // 1️⃣ HARD VALIDATION
     if (
       !isValidDate(parsedManufacturingDate) ||
       !isValidDate(parsedExpiryDate)
@@ -525,28 +521,24 @@ const submitDonation = async (req, res) => {
 
     const now = new Date();
 
-    // 2️⃣ Manufacturing date check
     if (parsedManufacturingDate > now) {
       return res.status(400).json({
         message: 'Manufacturing date cannot be in the future.',
       });
     }
 
-    // 3️⃣ Order check
     if (parsedExpiryDate <= parsedManufacturingDate) {
       return res.status(400).json({
         message: 'Expiry date must be after manufacturing date.',
       });
     }
 
-    // 4️⃣ Expiry past check
     if (parsedExpiryDate <= now) {
       return res.status(400).json({
         message: 'Expiry date cannot be in the past.',
       });
     }
 
-    // 5️⃣ 14-day rule
     const twoWeeksLater = new Date();
     twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
 
@@ -556,7 +548,7 @@ const submitDonation = async (req, res) => {
       });
     }
 
-    // ✅ SAVE TO DB
+    // SAVE TO DB (ONLY ONCE)
     const newDonation = new Donation({
       medicineName,
       quantity,
@@ -584,33 +576,6 @@ const submitDonation = async (req, res) => {
     return res.status(500).json({
       message: 'Server error while submitting donation.',
     });
-  }
-};
-
-    const newDonation = new Donation({
-      medicineName,
-      quantity,
-      medicineForm,
-      strength,
-      manufacturingDate: parsedManufacturingDate,
-      expiryDate: parsedExpiryDate,
-      donorName,
-      donorPhoneNumber,
-      donorCity,
-      donorArea,
-      donorId: req.user._id,
-      images: uploadedImages, 
-    });
-
-    await newDonation.save();
-
-    res.status(201).json({
-      message: 'Donation submitted successfully!',
-      donation: newDonation,
-    });
-  } catch (error) {
-    console.error('Donation submission error:', error);
-    res.status(500).json({message: 'Server error while submitting donation.'});
   }
 };
 
