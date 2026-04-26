@@ -215,7 +215,7 @@ const forgotPassword = async (req, res) => {
     const token = crypto.randomBytes(20).toString('hex');
 
     user.resetPasswordToken = token;
-    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // Expires in 15 mins
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; 
     await user.save();
 
     const emailLink = `${BACKEND_URL}/reset-password/${token}`;
@@ -406,44 +406,41 @@ const updateProfile = async (req, res) => {
     res.status(500).json({message: 'Failed to update profile'});
   }
 };
+
 function parseFlexibleDate(dateStr) {
-  if (!dateStr || !dateStr.trim()) return null;
+  if (!dateStr) return null;
 
   const cleaned = dateStr
     .trim()
     .replace(/[-\/\.]/g, ' ')
-    .replace(/\s+/g, ' ');
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 
-  const parts = cleaned.split(' ').map(Number);
+  const parts = cleaned.split(' ').filter(Boolean).map(Number);
 
   if (parts.some(isNaN)) return null;
 
-  let day = 1;
-  let month;
-  let year;
+  let year, month, day = 1;
 
-  // CASE 1: MM/YY (08/24)
+  // MM/YY
   if (parts.length === 2 && parts[0] <= 12 && parts[1] < 100) {
     month = parts[0];
     year = 2000 + parts[1];
-    return new Date(year, month - 1, 1);
   }
 
-  // CASE 2: MM/YYYY or YYYY/MM
-  if (parts.length === 2 && parts[1] > 100) {
-    month = parts[0];
-    year = parts[1];
-    return new Date(year, month - 1, 1);
+  // YYYY/MM or MM/YYYY
+  else if (parts.length === 2) {
+    if (parts[0] > 1000) {
+      year = parts[0];
+      month = parts[1];
+    } else {
+      month = parts[0];
+      year = parts[1];
+    }
   }
 
-  if (parts.length === 2 && parts[0] > 100) {
-    year = parts[0];
-    month = parts[1];
-    return new Date(year, month - 1, 1);
-  }
-
-  // CASE 3: FULL DATES
-  if (parts.length === 3) {
+  // FULL DATE
+  else if (parts.length === 3) {
     const [a, b, c] = parts;
 
     if (a > 1000) {
@@ -455,26 +452,25 @@ function parseFlexibleDate(dateStr) {
       month = b;
       year = c;
     } else {
-      month = a;
-      day = b;
-      year = c;
-    }
-
-    const date = new Date(year, month - 1, day);
-
-    // IMPORTANT: validate real date (JS auto-corrects invalid dates)
-    if (
-      date.getFullYear() !== year ||
-      date.getMonth() !== month - 1 ||
-      date.getDate() !== day
-    ) {
+      // ⚠️ DO NOT GUESS THIS CASE — reject it
       return null;
     }
-
-    return date;
+  } else {
+    return null;
   }
 
-  return null;
+  const date = new Date(year, month - 1, day);
+
+  // strict validation
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
 }
 
 
@@ -510,18 +506,51 @@ const submitDonation = async (req, res) => {
       uploadedImages.push(result.secure_url); // save the public URL
     }
 
-    const parsedManufacturingDate = parseFlexibleDate(manufacturingDate);
-    const parsedExpiryDate = parseFlexibleDate(expiryDate);
+    cconst isValidDate = d =>
+  d instanceof Date && !isNaN(d.getTime());
 
-    if (parsedExpiryDate) {
-      const twoWeeksLater = new Date();
-      twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
-      if (parsedExpiryDate <= twoWeeksLater) {
-        return res.status(400).json({
-          message: 'We do not accept medicines expiring within 2 weeks.',
-        });
-      }
-    }
+const parsedManufacturingDate = parseFlexibleDate(manufacturingDate);
+const parsedExpiryDate = parseFlexibleDate(expiryDate);
+
+// 1️⃣ HARD VALIDATION (must be valid dates)
+if (!isValidDate(parsedManufacturingDate) || !isValidDate(parsedExpiryDate)) {
+  return res.status(400).json({
+    message: 'Invalid date format detected. Please recheck manufacturing/expiry date.',
+  });
+}
+
+const now = new Date();
+
+// 2️⃣ RULE: manufacturing date cannot be in future
+if (parsedManufacturingDate > now) {
+  return res.status(400).json({
+    message: 'Manufacturing date cannot be in the future.',
+  });
+}
+
+// 3️⃣ RULE: expiry must be AFTER manufacturing
+if (parsedExpiryDate <= parsedManufacturingDate) {
+  return res.status(400).json({
+    message: 'Expiry date must be after manufacturing date.',
+  });
+}
+
+// 4️⃣ RULE: expiry cannot be in the past
+if (parsedExpiryDate <= now) {
+  return res.status(400).json({
+    message: 'Expiry date cannot be in the past.',
+  });
+}
+
+// 5️⃣ BUSINESS RULE: expiry should be at least 14 days ahead
+const twoWeeksLater = new Date();
+twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+
+if (parsedExpiryDate <= twoWeeksLater) {
+  return res.status(400).json({
+    message: 'We do not accept medicines expiring within 2 weeks.',
+  });
+}
 
     const newDonation = new Donation({
       medicineName,
@@ -535,7 +564,7 @@ const submitDonation = async (req, res) => {
       donorCity,
       donorArea,
       donorId: req.user._id,
-      images: uploadedImages, // store Cloudinary URLs
+      images: uploadedImages, 
     });
 
     await newDonation.save();
@@ -589,16 +618,26 @@ const getDonations = async (req, res) => {
     const donated = [];
 
     for (const d of donations) {
-      const isDonated = approvedSet.has(d._id.toString());
+  const isDonated = approvedSet.has(d._id.toString());
 
-      if (isDonated) {
-        donated.push(d);
-      } else if (new Date(d.expiryDate) > now) {
-        active.push(d);
-      } else {
-        expired.push(d);
-      }
-    }
+  const expiry =
+    d.expiryDate instanceof Date && !isNaN(d.expiryDate.getTime())
+      ? d.expiryDate
+      : null;
+
+  if (isDonated) {
+    donated.push(d);
+  } 
+  else if (!expiry) {
+    expired.push(d);
+  } 
+  else if (expiry > now) {
+    active.push(d);
+  } 
+  else {
+    expired.push(d);
+  }
+}
 
     res.status(200).json({
       active,
@@ -610,36 +649,6 @@ const getDonations = async (req, res) => {
     res.status(500).json({ message: 'Server error, unable to fetch donations.' });
   }
 };
-// const getDonations = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-
-//     // Fetch all donations by this donor
-//     let donations = await Donation.find({donorId: userId}).sort({
-//       donationDate: -1,
-//     });
-
-//     // Find all approved requests (i.e., already donated medicines)
-//     const Request = require('../models/Request');
-//     const approvedRequests = await Request.find({status: 'approved'}).select(
-//       'medicineId',
-//     );
-//     const approvedMedicineIds = approvedRequests.map(r =>
-//       r.medicineId.toString(),
-//     );
-
-//     // Filter out medicines that have been approved (already donated)
-//     donations = donations.filter(
-//       d => !approvedMedicineIds.includes(d._id.toString()),
-//     );
-
-//     // Send back only those not donated yet (active or expired)
-//     res.status(200).json(donations);
-//   } catch (error) {
-//     console.error('Error fetching donations:', error);
-//     res.status(500).json({message: 'Server error, unable to fetch donations.'});
-//   }
-// };
 
 // Get all donations (for receiver side)
 const getAllDonations = async (req, res) => {
