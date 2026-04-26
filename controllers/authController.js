@@ -481,7 +481,7 @@ function parseFlexibleDate(dateStr) {
 
 const submitDonation = async (req, res) => {
   try {
-    console.log("DONATION BODY RECEIVED:", req.body);
+
     const {
       medicineName,
       quantity,
@@ -564,37 +564,82 @@ const getMe = async (req, res) => {
     res.status(500).json({message: 'Server error'});
   }
 };
-
 const getDonations = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Fetch all donations by this donor
-    let donations = await Donation.find({donorId: userId}).sort({
-      donationDate: -1,
+    const donations = await Donation.find({ donorId: userId }).sort({
+      createdAt: -1,
     });
 
-    // Find all approved requests (i.e., already donated medicines)
     const Request = require('../models/Request');
-    const approvedRequests = await Request.find({status: 'approved'}).select(
-      'medicineId',
-    );
-    const approvedMedicineIds = approvedRequests.map(r =>
-      r.medicineId.toString(),
+
+    const approvedRequests = await Request.find({
+      status: 'approved',
+    }).select('medicineId');
+
+    const approvedSet = new Set(
+      approvedRequests.map(r => r.medicineId.toString()),
     );
 
-    // Filter out medicines that have been approved (already donated)
-    donations = donations.filter(
-      d => !approvedMedicineIds.includes(d._id.toString()),
-    );
+    const now = new Date();
 
-    // Send back only those not donated yet (active or expired)
-    res.status(200).json(donations);
+    const active = [];
+    const expired = [];
+    const donated = [];
+
+    for (const d of donations) {
+      const isDonated = approvedSet.has(d._id.toString());
+
+      if (isDonated) {
+        donated.push(d);
+      } else if (new Date(d.expiryDate) > now) {
+        active.push(d);
+      } else {
+        expired.push(d);
+      }
+    }
+
+    res.status(200).json({
+      active,
+      expired,
+      donated,
+    });
   } catch (error) {
     console.error('Error fetching donations:', error);
-    res.status(500).json({message: 'Server error, unable to fetch donations.'});
+    res.status(500).json({ message: 'Server error, unable to fetch donations.' });
   }
 };
+// const getDonations = async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+
+//     // Fetch all donations by this donor
+//     let donations = await Donation.find({donorId: userId}).sort({
+//       donationDate: -1,
+//     });
+
+//     // Find all approved requests (i.e., already donated medicines)
+//     const Request = require('../models/Request');
+//     const approvedRequests = await Request.find({status: 'approved'}).select(
+//       'medicineId',
+//     );
+//     const approvedMedicineIds = approvedRequests.map(r =>
+//       r.medicineId.toString(),
+//     );
+
+//     // Filter out medicines that have been approved (already donated)
+//     donations = donations.filter(
+//       d => !approvedMedicineIds.includes(d._id.toString()),
+//     );
+
+//     // Send back only those not donated yet (active or expired)
+//     res.status(200).json(donations);
+//   } catch (error) {
+//     console.error('Error fetching donations:', error);
+//     res.status(500).json({message: 'Server error, unable to fetch donations.'});
+//   }
+// };
 
 // Get all donations (for receiver side)
 const getAllDonations = async (req, res) => {
