@@ -477,7 +477,6 @@ function parseFlexibleDate(dateStr) {
 
 const submitDonation = async (req, res) => {
   try {
-
     const {
       medicineName,
       quantity,
@@ -492,65 +491,101 @@ const submitDonation = async (req, res) => {
     } = req.body;
 
     if (!req.files || req.files.length === 0) {
-      return res
-        .status(400)
-        .json({message: 'Please upload at least one image.'});
+      return res.status(400).json({
+        message: 'Please upload at least one image.',
+      });
     }
 
-    // Upload each image to Cloudinary
+    // Upload images
     const uploadedImages = [];
     for (const file of req.files) {
       const result = await cloudinary.uploader.upload(file.path, {
         folder: 'medshare/donations',
       });
-      uploadedImages.push(result.secure_url); // save the public URL
+      uploadedImages.push(result.secure_url);
     }
 
-    cconst isValidDate = d =>
-  d instanceof Date && !isNaN(d.getTime());
+    // ✅ FIXED: correct declaration
+    const isValidDate = (d) =>
+      d instanceof Date && !isNaN(d.getTime());
 
-const parsedManufacturingDate = parseFlexibleDate(manufacturingDate);
-const parsedExpiryDate = parseFlexibleDate(expiryDate);
+    const parsedManufacturingDate = parseFlexibleDate(manufacturingDate);
+    const parsedExpiryDate = parseFlexibleDate(expiryDate);
 
-// 1️⃣ HARD VALIDATION (must be valid dates)
-if (!isValidDate(parsedManufacturingDate) || !isValidDate(parsedExpiryDate)) {
-  return res.status(400).json({
-    message: 'Invalid date format detected. Please recheck manufacturing/expiry date.',
-  });
-}
+    // 1️⃣ HARD VALIDATION
+    if (
+      !isValidDate(parsedManufacturingDate) ||
+      !isValidDate(parsedExpiryDate)
+    ) {
+      return res.status(400).json({
+        message:
+          'Invalid date format detected. Please recheck manufacturing/expiry date.',
+      });
+    }
 
-const now = new Date();
+    const now = new Date();
 
-// 2️⃣ RULE: manufacturing date cannot be in future
-if (parsedManufacturingDate > now) {
-  return res.status(400).json({
-    message: 'Manufacturing date cannot be in the future.',
-  });
-}
+    // 2️⃣ Manufacturing date check
+    if (parsedManufacturingDate > now) {
+      return res.status(400).json({
+        message: 'Manufacturing date cannot be in the future.',
+      });
+    }
 
-// 3️⃣ RULE: expiry must be AFTER manufacturing
-if (parsedExpiryDate <= parsedManufacturingDate) {
-  return res.status(400).json({
-    message: 'Expiry date must be after manufacturing date.',
-  });
-}
+    // 3️⃣ Order check
+    if (parsedExpiryDate <= parsedManufacturingDate) {
+      return res.status(400).json({
+        message: 'Expiry date must be after manufacturing date.',
+      });
+    }
 
-// 4️⃣ RULE: expiry cannot be in the past
-if (parsedExpiryDate <= now) {
-  return res.status(400).json({
-    message: 'Expiry date cannot be in the past.',
-  });
-}
+    // 4️⃣ Expiry past check
+    if (parsedExpiryDate <= now) {
+      return res.status(400).json({
+        message: 'Expiry date cannot be in the past.',
+      });
+    }
 
-// 5️⃣ BUSINESS RULE: expiry should be at least 14 days ahead
-const twoWeeksLater = new Date();
-twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+    // 5️⃣ 14-day rule
+    const twoWeeksLater = new Date();
+    twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
 
-if (parsedExpiryDate <= twoWeeksLater) {
-  return res.status(400).json({
-    message: 'We do not accept medicines expiring within 2 weeks.',
-  });
-}
+    if (parsedExpiryDate <= twoWeeksLater) {
+      return res.status(400).json({
+        message: 'We do not accept medicines expiring within 2 weeks.',
+      });
+    }
+
+    // ✅ SAVE TO DB
+    const newDonation = new Donation({
+      medicineName,
+      quantity,
+      medicineForm,
+      strength,
+      manufacturingDate: parsedManufacturingDate,
+      expiryDate: parsedExpiryDate,
+      donorName,
+      donorPhoneNumber,
+      donorCity,
+      donorArea,
+      donorId: req.user._id,
+      images: uploadedImages,
+    });
+
+    await newDonation.save();
+
+    return res.status(201).json({
+      message: 'Donation submitted successfully!',
+      donation: newDonation,
+    });
+
+  } catch (error) {
+    console.error('Donation submission error:', error);
+    return res.status(500).json({
+      message: 'Server error while submitting donation.',
+    });
+  }
+};
 
     const newDonation = new Donation({
       medicineName,
