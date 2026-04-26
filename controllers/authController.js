@@ -60,7 +60,6 @@ const registerUser = async (req, res) => {
       return !hasVowel || matchesBadPattern;
     };
 
-
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const phoneRegex = /^((\+92)?(03)[0-9]{9})$/;
     const passwordRegex =
@@ -317,35 +316,6 @@ const verifyPassword = async (req, res) => {
   }
 };
 
-// const deleteAccount = async (req, res) => {
-//   try {
-//     const userId = req.user._id;
-//     const Request = require('../models/Request');
-//     const Notification = require('../models/Notification');
-//     const user = await User.findById(userId);
-
-//     if (!user) {
-//       return res.status(404).json({message: 'User not found.'});
-//     }
-
-//     if (user.role === 'Donate A Medicine') {
-//       await Donation.deleteMany({donorId: userId});
-//       await Request.deleteMany({donorId: userId});
-//       await Notification.deleteMany({donorId: userId});
-//     } else if (user.role === 'Receive A Medicine') {
-//       await Request.deleteMany({receiverId: userId});
-//       await Notification.deleteMany({receiverId: userId});
-//     }
-
-//     await User.findByIdAndDelete(userId);
-
-//     res
-//       .status(200)
-//       .json({message: 'Account and related data deleted successfully.'});
-//   } catch (error) {
-//     res.status(500).json({message: 'Server error during account deletion.'});
-//   }
-// };
 
 const deleteAccount = async (req, res) => {
   try {
@@ -436,29 +406,82 @@ const updateProfile = async (req, res) => {
     res.status(500).json({message: 'Failed to update profile'});
   }
 };
-
 function parseFlexibleDate(dateStr) {
   if (!dateStr || !dateStr.trim()) return null;
 
-  const normalized = dateStr.trim().replace(/[\.\s/]+/g, '-');
-  const parts = normalized.split('-').map(p => p.padStart(2, '0'));
+  const cleaned = dateStr
+    .trim()
+    .replace(/[-\/\.]/g, ' ')
+    .replace(/\s+/g, ' ');
 
+  const parts = cleaned.split(' ').map(Number);
+
+  if (parts.some(isNaN)) return null;
+
+  let day = 1;
+  let month;
+  let year;
+
+  // CASE 1: MM/YY (08/24)
+  if (parts.length === 2 && parts[0] <= 12 && parts[1] < 100) {
+    month = parts[0];
+    year = 2000 + parts[1];
+    return new Date(year, month - 1, 1);
+  }
+
+  // CASE 2: MM/YYYY or YYYY/MM
+  if (parts.length === 2 && parts[1] > 100) {
+    month = parts[0];
+    year = parts[1];
+    return new Date(year, month - 1, 1);
+  }
+
+  if (parts.length === 2 && parts[0] > 100) {
+    year = parts[0];
+    month = parts[1];
+    return new Date(year, month - 1, 1);
+  }
+
+  // CASE 3: FULL DATES
   if (parts.length === 3) {
-    // DD-MM-YYYY or YYYY-MM-DD
-    if (parts[0].length === 4)
-      return new Date(`${parts[0]}-${parts[1]}-${parts[2]}`); // YYYY-MM-DD
-    return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); // DD-MM-YYYY
-  } else if (parts.length === 2) {
-    // MM-YYYY or YYYY-MM
-    if (parts[0].length === 4) return new Date(`${parts[0]}-${parts[1]}`); // YYYY-MM
-    return new Date(`${parts[1]}-${parts[0]}`); // MM-YYYY
+    const [a, b, c] = parts;
+
+    if (a > 1000) {
+      year = a;
+      month = b;
+      day = c;
+    } else if (c > 1000) {
+      day = a;
+      month = b;
+      year = c;
+    } else {
+      month = a;
+      day = b;
+      year = c;
+    }
+
+    const date = new Date(year, month - 1, day);
+
+    // IMPORTANT: validate real date (JS auto-corrects invalid dates)
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return date;
   }
 
   return null;
 }
 
+
+
 const submitDonation = async (req, res) => {
   try {
+    console.log("DONATION BODY RECEIVED:", req.body);
     const {
       medicineName,
       quantity,
@@ -468,7 +491,8 @@ const submitDonation = async (req, res) => {
       expiryDate,
       donorName,
       donorPhoneNumber,
-      donorAddress,
+      donorCity,
+      donorArea,
     } = req.body;
 
     if (!req.files || req.files.length === 0) {
@@ -508,19 +532,18 @@ const submitDonation = async (req, res) => {
       expiryDate: parsedExpiryDate,
       donorName,
       donorPhoneNumber,
-      donorAddress,
+      donorCity,
+      donorArea,
       donorId: req.user._id,
       images: uploadedImages, // store Cloudinary URLs
     });
 
     await newDonation.save();
 
-    res
-      .status(201)
-      .json({
-        message: 'Donation submitted successfully!',
-        donation: newDonation,
-      });
+    res.status(201).json({
+      message: 'Donation submitted successfully!',
+      donation: newDonation,
+    });
   } catch (error) {
     console.error('Donation submission error:', error);
     res.status(500).json({message: 'Server error while submitting donation.'});
@@ -579,7 +602,7 @@ const getAllDonations = async (req, res) => {
     const today = new Date();
     let donations = await Donation.find({
       expiryDate: {$gte: today},
-    }).populate('donorId', 'donorName donorPhoneNumber donorAddress');
+    }).populate('donorId', 'donorName donorPhoneNumber donorCity, donorArea');
 
     const Request = require('../models/Request');
 

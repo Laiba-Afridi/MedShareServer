@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const donationSchema = new mongoose.Schema({
   donorId: {
@@ -6,17 +6,18 @@ const donationSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
-  medicineName: { type: String, required: true },
-  quantity: { type: String, required: true },
-  medicineForm: { type: String, required: true },
-  strength: { type: String, required: true },
-  manufacturingDate: { type: Date, required: true },
-  expiryDate: { type: Date, required: true },
-  donorName: { type: String, required: true },
-  donorPhoneNumber: { type: String, required: true },
-  donorAddress: { type: String, required: true },
-  images: [{ type: String }],
-  createdAt: { type: Date, default: Date.now },
+  medicineName: {type: String, required: true},
+  quantity: {type: String, required: true},
+  medicineForm: {type: String, required: true},
+  strength: {type: String, required: true},
+  manufacturingDate: {type: Date, required: true},
+  expiryDate: {type: Date, required: true},
+  donorName: {type: String, required: true},
+  donorPhoneNumber: {type: String, required: true},
+  donorCity: {type: String, required: true},
+  donorArea: {type: String, required: true},
+  images: [{type: String}],
+  createdAt: {type: Date, default: Date.now},
 });
 
-module.exports = mongoose.model("Donation", donationSchema);
+module.exports = mongoose.model('Donation', donationSchema);
